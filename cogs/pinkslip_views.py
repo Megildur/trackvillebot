@@ -1,106 +1,213 @@
 
 import discord
 from discord.ui import View, Button, Modal, Select
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import re
 
 class PinkSlipSubmissionView(View):
-    def __init__(self, interaction: discord.Interaction, db, embed_builder) -> None:
-        super().__init__(timeout=300)
-        self.interaction = interaction
+    """Professional vehicle registration submission interface."""
+    
+    def __init__(self, db, embed_manager) -> None:
+        super().__init__(timeout=600)
         self.db = db
-        self.embed_builder = embed_builder
+        self.embed_manager = embed_manager
 
-    @discord.ui.button(label='📝 Submit Registration', style=discord.ButtonStyle.primary)
-    async def submit(self, interaction: discord.Interaction, button: Button) -> None:
-        await interaction.response.send_modal(
-            PinkSlipSubmissionModal(self.interaction, self.db, self.embed_builder)
+    @discord.ui.button(
+        label='📝 Begin Registration', 
+        style=discord.ButtonStyle.primary,
+        emoji='🚗'
+    )
+    async def start_registration(self, interaction: discord.Interaction, button: Button) -> None:
+        """Launch the registration modal."""
+        modal = VehicleRegistrationModal(self.db, self.embed_manager)
+        await interaction.response.send_modal(modal)
+
+    @discord.ui.button(
+        label='📋 View Requirements', 
+        style=discord.ButtonStyle.secondary,
+        emoji='ℹ️'
+    )
+    async def view_requirements(self, interaction: discord.Interaction, button: Button) -> None:
+        """Display detailed requirements."""
+        embed = self.embed_manager.create_info(
+            "Registration Requirements",
+            "**📋 Required Information:**\n\n"
+            "**🚗 Vehicle Make & Model**\n"
+            "• Full manufacturer name and model\n"
+            "• Example: Ford Mustang GT, BMW M3 Competition\n\n"
+            "**📅 Manufacturing Year**\n"
+            "• 4-digit year (1990-2024)\n"
+            "• Must match vehicle specifications\n\n"
+            "**⚡ Engine Specifications**\n"
+            "• Power output (HP/WHP)\n"
+            "• Torque figures (if available)\n"
+            "• Example: 750whp 850nm, 1200hp 1400nm\n\n"
+            "**⚙️ Transmission Details**\n"
+            "• Type and gear count\n"
+            "• Example: 6-Speed Manual, 8-Speed Automatic\n\n"
+            "**🎮 Steam Platform ID**\n"
+            "• 17-digit Steam ID\n"
+            "• Found in Steam profile URL\n\n"
+            "**💰 Entry Fee**\n"
+            "• $3 USD payment required\n"
+            "• Contact staff for payment methods"
         )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @discord.ui.button(label='❌ Cancel', style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, button: Button) -> None:
-        embed = self.embed_builder.create_info_embed(
+    @discord.ui.button(
+        label='❌ Cancel', 
+        style=discord.ButtonStyle.secondary
+    )
+    async def cancel_registration(self, interaction: discord.Interaction, button: Button) -> None:
+        """Cancel the registration process."""
+        embed = self.embed_manager.create_info(
             "Registration Cancelled",
-            "Your vehicle registration has been cancelled. Use `/pinkslip submit` when you're ready to resubmit."
+            "Your registration has been cancelled. You can restart the process anytime using `/pinkslip submit`."
         )
         await interaction.response.edit_message(embed=embed, view=None)
 
-class PinkSlipSubmissionModal(Modal, title='🚗 Vehicle Registration Form'):
-    def __init__(self, interaction: discord.Interaction, db, embed_builder) -> None:
+class VehicleRegistrationModal(Modal, title='🚗 Vehicle Registration Form'):
+    """Comprehensive vehicle registration modal with validation."""
+    
+    def __init__(self, db, embed_manager) -> None:
         super().__init__()
-        self.interaction = interaction
         self.db = db
-        self.embed_builder = embed_builder
+        self.embed_manager = embed_manager
 
-    make_and_model = discord.ui.TextInput(
-        label='Make & Model',
-        placeholder='e.g., Ford Mustang GT',
+    make_model = discord.ui.TextInput(
+        label='Vehicle Make & Model',
+        placeholder='e.g., Ford Mustang GT, BMW M3 Competition',
         style=discord.TextStyle.short,
-        max_length=100
+        max_length=100,
+        required=True
     )
+    
     year = discord.ui.TextInput(
-        label='Year',
+        label='Manufacturing Year',
         placeholder='e.g., 2023',
         style=discord.TextStyle.short,
-        max_length=4
+        max_length=4,
+        min_length=4,
+        required=True
     )
+    
     engine_spec = discord.ui.TextInput(
         label='Engine Specifications',
-        placeholder='e.g., 1100whp 1300nm',
-        style=discord.TextStyle.short,
-        max_length=200
+        placeholder='e.g., 750whp 850nm, Twin Turbo V8',
+        style=discord.TextStyle.paragraph,
+        max_length=300,
+        required=True
     )
+    
     transmission = discord.ui.TextInput(
-        label='Transmission',
-        placeholder='e.g., 6-Speed Manual',
+        label='Transmission Type',
+        placeholder='e.g., 6-Speed Manual, 8-Speed Automatic',
         style=discord.TextStyle.short,
-        max_length=100
+        max_length=100,
+        required=True
     )
+    
     steam_id = discord.ui.TextInput(
-        label='Steam ID',
-        placeholder='e.g., 76561198125412123',
+        label='Steam ID (17 digits)',
+        placeholder='e.g., 76561198123456789',
         style=discord.TextStyle.short,
-        max_length=50
+        max_length=20,
+        min_length=15,
+        required=True
     )
     
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        vehicle_data = {
-            'make_model': self.make_and_model.value,
-            'year': self.year.value,
-            'engine_spec': self.engine_spec.value,
-            'transmission': self.transmission.value,
-            'steam_id': self.steam_id.value
-        }
-        
-        success, result = await self.db.create_pinkslip(
-            interaction.user.id, interaction.guild_id, vehicle_data
-        )
-        
-        if not success:
-            if result == "duplicate":
-                embed = self.embed_builder.create_error_embed(
-                    "Duplicate Registration",
-                    f"You already have a registration for **{vehicle_data['make_model']} {vehicle_data['year']}**"
-                )
-            else:
-                embed = self.embed_builder.create_error_embed(
-                    "Registration Failed",
-                    "An unexpected error occurred. Please try again."
-                )
-            await interaction.response.edit_message(embed=embed, view=None)
+        """Process the registration submission with validation."""
+        # Validate inputs
+        validation_errors = self._validate_inputs()
+        if validation_errors:
+            embed = self.embed_manager.create_error(
+                "Validation Failed",
+                "\n".join(validation_errors)
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # Success - notify user and staff
-        embed = self.embed_builder.create_success_embed(
-            "Registration Submitted Successfully",
-            "Your vehicle registration has been submitted for staff review. You'll be notified once it's processed."
-        )
-        await interaction.response.edit_message(embed=embed, view=None)
+        vehicle_data = {
+            'make_model': self.make_model.value.strip(),
+            'year': self.year.value.strip(),
+            'engine_spec': self.engine_spec.value.strip(),
+            'transmission': self.transmission.value.strip(),
+            'steam_id': self.steam_id.value.strip()
+        }
         
-        # Send to staff channel
-        await self._notify_staff(interaction, vehicle_data)
+        try:
+            success, result = await self.db.create_vehicle_registration(
+                interaction.user.id, interaction.guild_id, vehicle_data
+            )
+            
+            if not success:
+                if result == "duplicate":
+                    embed = self.embed_manager.create_error(
+                        "Duplicate Registration",
+                        f"You already have a registration for **{vehicle_data['make_model']} {vehicle_data['year']}**\n\n"
+                        "Each vehicle can only be registered once per user."
+                    )
+                else:
+                    embed = self.embed_manager.create_error(
+                        "Registration Failed",
+                        "An unexpected error occurred during registration. Please try again later."
+                    )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
 
-    async def _notify_staff(self, interaction: discord.Interaction, vehicle_data: dict) -> None:
+            # Success response
+            embed = self.embed_manager.create_success(
+                "Registration Submitted Successfully",
+                f"**Vehicle:** {vehicle_data['make_model']} ({vehicle_data['year']})\n"
+                f"**Registration ID:** `{result}`\n\n"
+                "Your registration has been submitted for staff review. "
+                "You'll receive a notification once the review is complete.\n\n"
+                "**Next Steps:**\n"
+                "▫️ Await staff review (typically 24-48 hours)\n"
+                "▫️ Complete entry fee payment if not done already\n"
+                "▫️ Check your DMs for approval/denial notification"
+            )
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+            # Notify staff
+            await self._notify_staff(interaction, vehicle_data)
+
+        except Exception as e:
+            embed = self.embed_manager.create_error(
+                "System Error",
+                "A system error occurred. Please contact an administrator."
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    def _validate_inputs(self) -> List[str]:
+        """Validate all form inputs."""
+        errors = []
+        
+        # Year validation
+        if not self.year.value.isdigit() or not (1990 <= int(self.year.value) <= 2024):
+            errors.append("❌ Year must be between 1990 and 2024")
+        
+        # Steam ID validation
+        steam_id = self.steam_id.value.strip()
+        if not steam_id.isdigit() or len(steam_id) != 17:
+            errors.append("❌ Steam ID must be exactly 17 digits")
+        
+        # Basic content validation
+        if len(self.make_model.value.strip()) < 3:
+            errors.append("❌ Make & Model must be at least 3 characters")
+            
+        if len(self.engine_spec.value.strip()) < 5:
+            errors.append("❌ Engine specifications must be more detailed")
+            
+        if len(self.transmission.value.strip()) < 3:
+            errors.append("❌ Transmission information is too brief")
+        
+        return errors
+
+    async def _notify_staff(self, interaction: discord.Interaction, vehicle_data: Dict[str, str]) -> None:
+        """Send registration to staff review channel."""
         guild_settings = await self.db.get_guild_settings(interaction.guild_id)
         if not guild_settings:
             return
@@ -109,59 +216,125 @@ class PinkSlipSubmissionModal(Modal, title='🚗 Vehicle Registration Form'):
         if not channel:
             return
 
-        embed = self.embed_builder.create_review_embed(interaction.user, vehicle_data)
-        view = PinkSlipReviewView(interaction, self.db, self.embed_builder)
-        await channel.send(embed=embed, view=view)
+        embed = self.embed_manager.create_review_request(interaction.user, vehicle_data)
+        view = PinkSlipReviewView(interaction, self.db, self.embed_manager)
+        
+        try:
+            await channel.send(embed=embed, view=view)
+        except discord.Forbidden:
+            pass  # Silently fail if no permissions
 
 class PinkSlipReviewView(View):
-    def __init__(self, interaction: discord.Interaction, db=None, embed_builder=None) -> None:
+    """Staff review interface with enhanced functionality."""
+    
+    def __init__(self, interaction: Optional[discord.Interaction], db, embed_manager) -> None:
         super().__init__(timeout=None)
         self.interaction = interaction
         self.db = db
-        self.embed_builder = embed_builder
+        self.embed_manager = embed_manager
 
-    @discord.ui.button(label='✅ Approve', style=discord.ButtonStyle.success, custom_id='approve_ps')
-    async def approve(self, interaction: discord.Interaction, button: Button) -> None:
-        await self._process_review(interaction, "approved", "✅ Registration Approved")
+    @discord.ui.button(
+        label='✅ Approve Registration', 
+        style=discord.ButtonStyle.success, 
+        custom_id='approve_registration',
+        emoji='✅'
+    )
+    async def approve_registration(self, interaction: discord.Interaction, button: Button) -> None:
+        """Approve the vehicle registration."""
+        embed_data = self._extract_embed_data(interaction.message.embeds[0])
+        
+        try:
+            await self.db.update_vehicle_status(
+                int(embed_data['user_id']), interaction.guild_id,
+                embed_data['make_model'], embed_data['year'], 'approved'
+            )
+            
+            # Update staff message
+            embed = self.embed_manager.create_success(
+                "Registration Approved",
+                f"**Vehicle:** {embed_data['make_model']} ({embed_data['year']})\n"
+                f"**Approved by:** {interaction.user.mention}\n"
+                f"**User notified:** ✅"
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+            
+            # Notify user
+            await self._notify_user_approval(interaction, embed_data)
 
-    @discord.ui.button(label='❌ Deny', style=discord.ButtonStyle.danger, custom_id='deny_ps')
-    async def deny(self, interaction: discord.Interaction, button: Button) -> None:
+        except Exception as e:
+            embed = self.embed_manager.create_error(
+                "Approval Failed",
+                "An error occurred while processing the approval."
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(
+        label='❌ Deny Registration', 
+        style=discord.ButtonStyle.danger, 
+        custom_id='deny_registration',
+        emoji='❌'
+    )
+    async def deny_registration(self, interaction: discord.Interaction, button: Button) -> None:
+        """Deny the vehicle registration with reason."""
         await interaction.response.send_modal(
-            PinkSlipDenyModal(interaction, self.db, self.embed_builder)
+            RegistrationDenialModal(self.db, self.embed_manager)
         )
 
-    async def _process_review(self, interaction: discord.Interaction, status: str, title: str) -> None:
-        message = await interaction.original_response()
-        embed_data = self._extract_embed_data(message.embeds[0])
-        
-        await self.db.update_pinkslip_approval(
-            embed_data['user_id'], interaction.guild_id,
-            embed_data['make_model'], embed_data['year'], status
+    @discord.ui.button(
+        label='🔍 Request More Info', 
+        style=discord.ButtonStyle.secondary, 
+        custom_id='request_info',
+        emoji='🔍'
+    )
+    async def request_additional_info(self, interaction: discord.Interaction, button: Button) -> None:
+        """Request additional information from the user."""
+        await interaction.response.send_modal(
+            InfoRequestModal(self.db, self.embed_manager)
         )
-        
-        # Update staff message
-        embed = self.embed_builder.create_success_embed(
-            title,
-            f"<@{embed_data['user_id']}> has been notified of the decision."
-        )
-        await interaction.response.edit_message(embed=embed, view=None)
-        
-        # Notify user
-        await self._notify_user_approval(interaction, embed_data)
 
-    def _extract_embed_data(self, embed) -> dict:
+    def _extract_embed_data(self, embed: discord.Embed) -> Dict[str, str]:
+        """Extract vehicle data from the review embed."""
         description = embed.description
-        mention_pattern = r'<@!?(\d+)>'
-        match = re.search(mention_pattern, description)
         fields = embed.fields
         
+        # Extract user ID from mention
+        mention_pattern = r'<@!?(\d+)>'
+        user_match = re.search(mention_pattern, description)
+        user_id = user_match.group(1) if user_match else "0"
+        
+        # Extract vehicle data from fields
+        vehicle_field = next((f for f in fields if "Vehicle Details" in f.name), None)
+        performance_field = next((f for f in fields if "Performance Specs" in f.name), None)
+        
+        make_model, year = "", ""
+        engine_spec, transmission = "", ""
+        
+        if vehicle_field:
+            lines = vehicle_field.value.split('\n')
+            for line in lines:
+                if 'Make/Model:' in line:
+                    make_model = line.split(':', 1)[1].strip().replace('**', '')
+                elif 'Year:' in line:
+                    year = line.split(':', 1)[1].strip().replace('**', '')
+        
+        if performance_field:
+            lines = performance_field.value.split('\n')
+            for line in lines:
+                if 'Engine:' in line:
+                    engine_spec = line.split(':', 1)[1].strip().replace('**', '')
+                elif 'Transmission:' in line:
+                    transmission = line.split(':', 1)[1].strip().replace('**', '')
+        
         return {
-            'user_id': match.group(1),
-            'make_model': fields[0].value,
-            'year': fields[1].value
+            'user_id': user_id,
+            'make_model': make_model,
+            'year': year,
+            'engine_spec': engine_spec,
+            'transmission': transmission
         }
 
-    async def _notify_user_approval(self, interaction: discord.Interaction, embed_data: dict) -> None:
+    async def _notify_user_approval(self, interaction: discord.Interaction, embed_data: Dict[str, str]) -> None:
+        """Send approval notification to user."""
         guild_settings = await self.db.get_guild_settings(interaction.guild_id)
         if not guild_settings:
             return
@@ -170,57 +343,91 @@ class PinkSlipReviewView(View):
         if not channel:
             return
 
-        embed = self.embed_builder.create_approval_notification_embed(
+        embed = self.embed_manager.create_approval_notification(
             interaction.user, embed_data['make_model'], embed_data['year']
         )
-        await channel.send(f"<@{embed_data['user_id']}>", embed=embed)
+        
+        try:
+            await channel.send(f"<@{embed_data['user_id']}>", embed=embed)
+        except discord.Forbidden:
+            pass
 
-class PinkSlipDenyModal(Modal, title='❌ Registration Denial'):
-    def __init__(self, interaction: discord.Interaction, db, embed_builder) -> None:
+class RegistrationDenialModal(Modal, title='❌ Registration Denial'):
+    """Modal for denying registrations with detailed reasons."""
+    
+    def __init__(self, db, embed_manager) -> None:
         super().__init__()
-        self.interaction = interaction
         self.db = db
-        self.embed_builder = embed_builder
+        self.embed_manager = embed_manager
 
-    reason = discord.ui.TextInput(
+    denial_reason = discord.ui.TextInput(
         label='Reason for Denial',
-        placeholder='e.g., Invalid Steam ID, missing payment confirmation',
+        placeholder='Please provide a detailed explanation for the denial...',
         style=discord.TextStyle.paragraph,
-        max_length=500
+        max_length=1000,
+        required=True
     )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        message = await interaction.original_response()
-        embed_data = self._extract_embed_data(message.embeds[0])
+        """Process the denial with reason."""
+        embed_data = self._extract_embed_data(interaction.message.embeds[0])
         
-        # Delete from database
-        await self.db.delete_pinkslip_by_details(
-            embed_data['user_id'], interaction.guild_id,
-            embed_data['make_model'], embed_data['year']
-        )
-        
-        # Update staff message
-        embed = self.embed_builder.create_denial_embed(
-            embed_data, self.reason.value
-        )
-        await interaction.response.edit_message(embed=embed, view=None)
-        
-        # Notify user
-        await self._notify_user_denial(interaction, embed_data)
+        try:
+            # Delete the registration
+            await self.db.delete_vehicle_by_details(
+                int(embed_data['user_id']), interaction.guild_id,
+                embed_data['make_model'], embed_data['year']
+            )
+            
+            # Update staff message
+            embed = self.embed_manager.create_error(
+                "Registration Denied",
+                f"**Vehicle:** {embed_data['make_model']} ({embed_data['year']})\n"
+                f"**Denied by:** {interaction.user.mention}\n"
+                f"**Reason:** {self.denial_reason.value}\n"
+                f"**User notified:** ✅"
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+            
+            # Notify user
+            await self._notify_user_denial(interaction, embed_data)
 
-    def _extract_embed_data(self, embed) -> dict:
+        except Exception as e:
+            embed = self.embed_manager.create_error(
+                "Denial Failed",
+                "An error occurred while processing the denial."
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    def _extract_embed_data(self, embed: discord.Embed) -> Dict[str, str]:
+        """Extract data from embed (same as review view)."""
+        # Implementation same as PinkSlipReviewView._extract_embed_data
         description = embed.description
-        mention_pattern = r'<@!?(\d+)>'
-        match = re.search(mention_pattern, description)
         fields = embed.fields
         
+        mention_pattern = r'<@!?(\d+)>'
+        user_match = re.search(mention_pattern, description)
+        user_id = user_match.group(1) if user_match else "0"
+        
+        vehicle_field = next((f for f in fields if "Vehicle Details" in f.name), None)
+        
+        make_model, year = "", ""
+        if vehicle_field:
+            lines = vehicle_field.value.split('\n')
+            for line in lines:
+                if 'Make/Model:' in line:
+                    make_model = line.split(':', 1)[1].strip().replace('**', '')
+                elif 'Year:' in line:
+                    year = line.split(':', 1)[1].strip().replace('**', '')
+        
         return {
-            'user_id': match.group(1),
-            'make_model': fields[0].value,
-            'year': fields[1].value
+            'user_id': user_id,
+            'make_model': make_model,
+            'year': year
         }
 
-    async def _notify_user_denial(self, interaction: discord.Interaction, embed_data: dict) -> None:
+    async def _notify_user_denial(self, interaction: discord.Interaction, embed_data: Dict[str, str]) -> None:
+        """Send denial notification to user."""
         guild_settings = await self.db.get_guild_settings(interaction.guild_id)
         if not guild_settings:
             return
@@ -229,106 +436,265 @@ class PinkSlipDenyModal(Modal, title='❌ Registration Denial'):
         if not channel:
             return
 
-        embed = self.embed_builder.create_denial_notification_embed(
-            interaction.user, embed_data['make_model'], embed_data['year'], self.reason.value
+        embed = self.embed_manager.create_denial_notification(
+            interaction.user, embed_data['make_model'], embed_data['year'], self.denial_reason.value
         )
-        await channel.send(f"<@{embed_data['user_id']}>", embed=embed)
+        
+        try:
+            await channel.send(f"<@{embed_data['user_id']}>", embed=embed)
+        except discord.Forbidden:
+            pass
+
+class InfoRequestModal(Modal, title='🔍 Request Additional Information'):
+    """Modal for requesting more information from users."""
+    
+    def __init__(self, db, embed_manager) -> None:
+        super().__init__()
+        self.db = db
+        self.embed_manager = embed_manager
+
+    info_request = discord.ui.TextInput(
+        label='Information Needed',
+        placeholder='Please specify what additional information is required...',
+        style=discord.TextStyle.paragraph,
+        max_length=800,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        """Send information request."""
+        embed_data = self._extract_embed_data(interaction.message.embeds[0])
+        
+        # Update staff message
+        embed = self.embed_manager.create_warning(
+            "Additional Information Requested",
+            f"**Vehicle:** {embed_data['make_model']} ({embed_data['year']})\n"
+            f"**Requested by:** {interaction.user.mention}\n"
+            f"**Information Needed:** {self.info_request.value}\n\n"
+            "*User has been notified. Registration remains pending.*"
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+        
+        # Notify user
+        await self._notify_user_info_request(interaction, embed_data)
+
+    def _extract_embed_data(self, embed: discord.Embed) -> Dict[str, str]:
+        """Extract data from embed."""
+        # Same implementation as other modals
+        description = embed.description
+        fields = embed.fields
+        
+        mention_pattern = r'<@!?(\d+)>'
+        user_match = re.search(mention_pattern, description)
+        user_id = user_match.group(1) if user_match else "0"
+        
+        vehicle_field = next((f for f in fields if "Vehicle Details" in f.name), None)
+        
+        make_model, year = "", ""
+        if vehicle_field:
+            lines = vehicle_field.value.split('\n')
+            for line in lines:
+                if 'Make/Model:' in line:
+                    make_model = line.split(':', 1)[1].strip().replace('**', '')
+                elif 'Year:' in line:
+                    year = line.split(':', 1)[1].strip().replace('**', '')
+        
+        return {
+            'user_id': user_id,
+            'make_model': make_model,
+            'year': year
+        }
+
+    async def _notify_user_info_request(self, interaction: discord.Interaction, embed_data: Dict[str, str]) -> None:
+        """Notify user about information request."""
+        guild_settings = await self.db.get_guild_settings(interaction.guild_id)
+        if not guild_settings:
+            return
+            
+        channel = interaction.guild.get_channel(guild_settings[1])
+        if not channel:
+            return
+
+        embed = self.embed_manager.create_warning(
+            "Additional Information Required",
+            f"Your registration for **{embed_data['make_model']} ({embed_data['year']})** requires additional information.\n\n"
+            f"**Information Needed:**\n{self.info_request.value}\n\n"
+            "Please contact staff to provide the requested information. Your registration will remain pending until resolved."
+        )
+        
+        try:
+            await channel.send(f"<@{embed_data['user_id']}>", embed=embed)
+        except discord.Forbidden:
+            pass
 
 class RaceTrackerView(View):
-    def __init__(self, interaction: discord.Interaction, opponent: discord.Member, db, embed_builder) -> None:
-        super().__init__(timeout=300)
-        self.interaction = interaction
+    """Enhanced race result tracking interface."""
+    
+    def __init__(self, user: discord.Member, opponent: discord.Member, db, embed_manager) -> None:
+        super().__init__(timeout=900)
+        self.user = user
         self.opponent = opponent
         self.db = db
-        self.embed_builder = embed_builder
+        self.embed_manager = embed_manager
 
-    @discord.ui.button(label='🏆 I Won', style=discord.ButtonStyle.success)
-    async def win(self, interaction: discord.Interaction, button: Button) -> None:
-        await self.db.update_win_loss_stats(interaction.user.id, interaction.guild_id, "wins")
-        await self._handle_outcome(interaction, "win", "Select the vehicle you won:")
+    @discord.ui.button(
+        label='🏆 I Won the Race', 
+        style=discord.ButtonStyle.success,
+        emoji='🏆'
+    )
+    async def record_victory(self, interaction: discord.Interaction, button: Button) -> None:
+        """Handle victory recording."""
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message(
+                "❌ Only the person who initiated this can record their result.", ephemeral=True
+            )
+            return
+            
+        await self.db.update_user_stats(self.user.id, interaction.guild_id, "wins")
+        await self._handle_vehicle_selection(interaction, "win")
 
-    @discord.ui.button(label='💔 I Lost', style=discord.ButtonStyle.danger)
-    async def loss(self, interaction: discord.Interaction, button: Button) -> None:
-        await self.db.update_win_loss_stats(interaction.user.id, interaction.guild_id, "loses")
-        await self._handle_outcome(interaction, "lose", "Select the vehicle you lost:")
+    @discord.ui.button(
+        label='💔 I Lost the Race', 
+        style=discord.ButtonStyle.danger,
+        emoji='💔'
+    )
+    async def record_loss(self, interaction: discord.Interaction, button: Button) -> None:
+        """Handle loss recording."""
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message(
+                "❌ Only the person who initiated this can record their result.", ephemeral=True
+            )
+            return
+            
+        await self.db.update_user_stats(self.user.id, interaction.guild_id, "losses")
+        await self._handle_vehicle_selection(interaction, "lose")
 
-    async def _handle_outcome(self, interaction: discord.Interaction, outcome: str, description: str) -> None:
-        embed = self.embed_builder.create_info_embed("Race Results Updated", description)
+    @discord.ui.button(
+        label='❌ Cancel', 
+        style=discord.ButtonStyle.secondary
+    )
+    async def cancel_race_tracking(self, interaction: discord.Interaction, button: Button) -> None:
+        """Cancel race tracking."""
+        embed = self.embed_manager.create_info(
+            "Race Tracking Cancelled",
+            "No race results have been recorded."
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+
+    async def _handle_vehicle_selection(self, interaction: discord.Interaction, outcome: str) -> None:
+        """Handle vehicle selection for transfer."""
+        target_user = self.opponent if outcome == "win" else self.user
+        user_data = await self.db.get_user_complete_data(target_user.id, interaction.guild_id)
         
-        if outcome == "win":
-            opponent_pinkslips = await self.db.get_user_pinkslips(self.opponent.id, interaction.guild_id)
-            view = VehicleSelectionView(
-                interaction, self.opponent, opponent_pinkslips, outcome, self.db, self.embed_builder
+        if not user_data['vehicles']:
+            embed = self.embed_manager.create_info(
+                "No Vehicles Available",
+                f"{target_user.mention} has no registered vehicles to transfer."
             )
-        else:
-            user_pinkslips = await self.db.get_user_pinkslips(interaction.user.id, interaction.guild_id)
-            view = VehicleSelectionView(
-                interaction, interaction.user, user_pinkslips, outcome, self.db, self.embed_builder
+            await interaction.response.edit_message(embed=embed, view=None)
+            return
+
+        # Filter approved vehicles only
+        approved_vehicles = [v for v in user_data['vehicles'] if v[4] == 'approved']
+        
+        if not approved_vehicles:
+            embed = self.embed_manager.create_info(
+                "No Approved Vehicles",
+                f"{target_user.mention} has no approved vehicles available for transfer."
             )
+            await interaction.response.edit_message(embed=embed, view=None)
+            return
+
+        embed = self.embed_manager.create_info(
+            "Select Vehicle for Transfer",
+            f"Choose which vehicle to transfer from {target_user.mention}:"
+        )
+        
+        view = VehicleSelectionView(
+            self.user, target_user, approved_vehicles, outcome, self.db, self.embed_manager
+        )
         
         await interaction.response.edit_message(embed=embed, view=view)
 
 class VehicleSelectionView(View):
-    def __init__(self, interaction: discord.Interaction, target_user: discord.Member, 
-                 pinkslips: List, outcome: str, db, embed_builder) -> None:
-        super().__init__(timeout=300)
-        self.interaction = interaction
-        self.target_user = target_user
+    """Vehicle selection interface for transfers."""
+    
+    def __init__(self, initiator: discord.Member, target: discord.Member, 
+                 vehicles: List, outcome: str, db, embed_manager) -> None:
+        super().__init__(timeout=600)
+        self.initiator = initiator
+        self.target = target
         self.outcome = outcome
         self.db = db
-        self.embed_builder = embed_builder
+        self.embed_manager = embed_manager
         
-        if pinkslips:
-            dropdown = VehicleDropdown(interaction, target_user, pinkslips, outcome, db, embed_builder)
+        if vehicles:
+            dropdown = VehicleDropdown(
+                initiator, target, vehicles[:25], outcome, db, embed_manager
+            )
             self.add_item(dropdown)
 
 class VehicleDropdown(Select):
-    def __init__(self, interaction: discord.Interaction, target_user: discord.Member,
-                 pinkslips: List, outcome: str, db, embed_builder) -> None:
-        self.interaction = interaction
-        self.target_user = target_user
+    """Dropdown for vehicle selection."""
+    
+    def __init__(self, initiator: discord.Member, target: discord.Member,
+                 vehicles: List, outcome: str, db, embed_manager) -> None:
+        self.initiator = initiator
+        self.target = target
         self.outcome = outcome
         self.db = db
-        self.embed_builder = embed_builder
+        self.embed_manager = embed_manager
         
         options = [
             discord.SelectOption(
-                label=f"{pinkslip[0]} - {pinkslip[1]}",
-                value=str(pinkslip[5]),  # slip_id
-                description=f"ID: {pinkslip[5]}"
+                label=f"{vehicle[0]} ({vehicle[1]})",
+                value=str(vehicle[7]),  # slip_id
+                description=f"ID: {vehicle[7]} • Status: {vehicle[4].title()}",
+                emoji="🚗"
             )
-            for pinkslip in pinkslips[:25]  # Discord limit
+            for vehicle in vehicles
         ]
         
         super().__init__(
-            placeholder="Select a vehicle...",
+            placeholder="Select a vehicle to transfer...",
             options=options,
-            custom_id='vehicle_dropdown'
+            custom_id='vehicle_selection'
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        """Handle vehicle selection."""
         selected_slip_id = self.values[0]
-        pinkslip_data = await self.db.get_pinkslip_by_id(selected_slip_id)
+        vehicle_data = await self.db.get_vehicle_by_id(selected_slip_id)
         
-        if not pinkslip_data:
-            embed = self.embed_builder.create_error_embed(
-                "Error", "Vehicle registration not found."
+        if not vehicle_data:
+            embed = self.embed_manager.create_error(
+                "Vehicle Not Found",
+                "The selected vehicle could not be found."
             )
             await interaction.response.edit_message(embed=embed, view=None)
             return
 
         # Transfer ownership
-        new_owner = interaction.user if self.outcome == "win" else self.target_user
-        await self.db.transfer_pinkslip_ownership(selected_slip_id, new_owner.id, interaction.guild_id)
+        new_owner = self.initiator if self.outcome == "win" else self.target
+        success = await self.db.transfer_vehicle_ownership(
+            selected_slip_id, new_owner.id, interaction.guild_id
+        )
+        
+        if not success:
+            embed = self.embed_manager.create_error(
+                "Transfer Failed",
+                "Vehicle ownership transfer failed."
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+            return
 
-        # Create confirmation view
-        embed = self.embed_builder.create_transfer_confirmation_embed(
-            interaction.user, self.target_user, pinkslip_data[1], pinkslip_data[2], self.outcome
+        # Create confirmation request
+        embed = self.embed_manager.create_transfer_confirmation(
+            self.initiator, self.target, vehicle_data[2], vehicle_data[3], self.outcome
         )
         
         view = TransferConfirmationView(
-            interaction, self.target_user, interaction.user, self.outcome,
-            selected_slip_id, self.db, self.embed_builder
+            self.initiator, self.target, self.outcome, selected_slip_id, self.db, self.embed_manager
         )
         
         await interaction.response.edit_message(embed=embed, view=None)
@@ -336,106 +702,177 @@ class VehicleDropdown(Select):
         # Send to notification channel
         await self._send_confirmation_request(interaction, embed, view)
 
-    async def _send_confirmation_request(self, interaction: discord.Interaction, embed: discord.Embed, view: View) -> None:
+    async def _send_confirmation_request(self, interaction: discord.Interaction, 
+                                       embed: discord.Embed, view: View) -> None:
+        """Send confirmation request to notification channel."""
         guild_settings = await self.db.get_guild_settings(interaction.guild_id)
         if not guild_settings:
             return
             
         channel = interaction.guild.get_channel(guild_settings[1])
-        if channel:
-            target_mention = self.target_user.mention if self.outcome == "win" else interaction.user.mention
+        if not channel:
+            return
+            
+        target_mention = self.target.mention
+        try:
             await channel.send(target_mention, embed=embed, view=view)
+        except discord.Forbidden:
+            pass
 
 class TransferConfirmationView(View):
-    def __init__(self, interaction: discord.Interaction, target_user: discord.Member,
-                 initiator: discord.Member, outcome: str, slip_id: str, db, embed_builder) -> None:
-        super().__init__(timeout=600)
-        self.interaction = interaction
-        self.target_user = target_user
+    """Transfer confirmation interface."""
+    
+    def __init__(self, initiator: discord.Member, target: discord.Member,
+                 outcome: str, slip_id: str, db, embed_manager) -> None:
+        super().__init__(timeout=1800)  # 30 minutes
         self.initiator = initiator
+        self.target = target
         self.outcome = outcome
         self.slip_id = slip_id
         self.db = db
-        self.embed_builder = embed_builder
+        self.embed_manager = embed_manager
 
-    @discord.ui.button(label='✅ Confirm', style=discord.ButtonStyle.success)
-    async def confirm(self, interaction: discord.Interaction, button: Button) -> None:
-        if interaction.user.id != self.target_user.id:
+    @discord.ui.button(
+        label='✅ Confirm Transfer', 
+        style=discord.ButtonStyle.success,
+        emoji='✅'
+    )
+    async def confirm_transfer(self, interaction: discord.Interaction, button: Button) -> None:
+        """Confirm the vehicle transfer."""
+        if interaction.user.id != self.target.id:
             await interaction.response.send_message(
                 "❌ Only the mentioned user can confirm this transfer.", ephemeral=True
             )
             return
 
         # Update opponent's stats
-        opponent_stat = "loses" if self.outcome == "win" else "wins"
-        await self.db.update_win_loss_stats(self.target_user.id, interaction.guild_id, opponent_stat)
+        opponent_stat = "losses" if self.outcome == "win" else "wins"
+        await self.db.update_user_stats(self.target.id, interaction.guild_id, opponent_stat)
+        
+        # Record race result
+        winner_id = self.initiator.id if self.outcome == "win" else self.target.id
+        loser_id = self.target.id if self.outcome == "win" else self.initiator.id
+        await self.db.record_race_result(interaction.guild_id, winner_id, loser_id, self.slip_id)
 
-        embed = self.embed_builder.create_success_embed(
+        embed = self.embed_manager.create_success(
             "Transfer Confirmed",
-            "✅ Race results have been recorded and vehicle ownership has been transferred."
+            f"✅ **Race Result Recorded**\n"
+            f"**Winner:** {'🏆 ' + self.initiator.mention if self.outcome == 'win' else '🏆 ' + self.target.mention}\n"
+            f"**Vehicle Transferred:** Successfully\n"
+            f"**Statistics Updated:** Both participants\n\n"
+            "*Thank you for using the official racing system!*"
         )
         await interaction.response.edit_message(embed=embed, view=None)
 
-    @discord.ui.button(label='❌ Cancel', style=discord.ButtonStyle.danger)
-    async def cancel(self, interaction: discord.Interaction, button: Button) -> None:
-        if interaction.user.id != self.target_user.id:
+    @discord.ui.button(
+        label='🚨 Dispute Transfer', 
+        style=discord.ButtonStyle.danger,
+        emoji='🚨'
+    )
+    async def dispute_transfer(self, interaction: discord.Interaction, button: Button) -> None:
+        """Dispute the vehicle transfer."""
+        if interaction.user.id != self.target.id:
             await interaction.response.send_message(
-                "❌ Only the mentioned user can cancel this transfer.", ephemeral=True
+                "❌ Only the mentioned user can dispute this transfer.", ephemeral=True
             )
             return
 
-        # Revert changes
-        initiator_stat = "wins" if self.outcome == "win" else "loses"
-        await self.db.update_win_loss_stats(self.initiator.id, interaction.guild_id, initiator_stat, -1)
+        # Revert all changes
+        initiator_stat = "wins" if self.outcome == "win" else "losses"
+        await self.db.update_user_stats(self.initiator.id, interaction.guild_id, initiator_stat, -1)
         
         # Revert ownership
-        original_owner = self.target_user if self.outcome == "win" else self.initiator
-        await self.db.transfer_pinkslip_ownership(self.slip_id, original_owner.id, interaction.guild_id)
+        original_owner = self.target if self.outcome == "win" else self.initiator
+        await self.db.transfer_vehicle_ownership(self.slip_id, original_owner.id, interaction.guild_id)
 
-        embed = self.embed_builder.create_error_embed(
-            "Transfer Cancelled",
-            "❌ The transfer has been cancelled and changes have been reverted."
+        embed = self.embed_manager.create_error(
+            "Transfer Disputed",
+            f"🚨 **Race Result Disputed**\n\n"
+            f"**Disputed by:** {self.target.mention}\n"
+            f"**All changes have been reverted**\n\n"
+            "**Staff has been notified** and will investigate this dispute. "
+            "Please provide evidence of the actual race outcome to staff members.\n\n"
+            "*Fraudulent claims may result in penalties.*"
         )
         await interaction.response.edit_message(embed=embed, view=None)
 
 class PinkSlipInventoryView(View):
-    def __init__(self, interaction: discord.Interaction, member: discord.Member,
-                 pinkslips: List, db, embed_builder) -> None:
-        super().__init__(timeout=600)
-        self.interaction = interaction
+    """Enhanced vehicle inventory browser."""
+    
+    def __init__(self, member: discord.Member, vehicles: List, db, embed_manager) -> None:
+        super().__init__(timeout=900)
         self.member = member
         self.db = db
-        self.embed_builder = embed_builder
+        self.embed_manager = embed_manager
         
-        if pinkslips:
-            dropdown = PinkSlipInventoryDropdown(interaction, member, pinkslips, db, embed_builder)
+        if vehicles:
+            dropdown = InventoryDropdown(member, vehicles[:25], db, embed_manager)
             self.add_item(dropdown)
 
-    @discord.ui.button(label='🔙 Back to Overview', style=discord.ButtonStyle.secondary, row=1)
-    async def back(self, interaction: discord.Interaction, button: Button) -> None:
-        pinkslips = await self.db.get_user_pinkslips(self.member.id, interaction.guild_id)
-        win_loss_stats = await self.db.get_win_loss_stats(self.member.id, interaction.guild_id)
+    @discord.ui.button(
+        label='🏠 Back to Profile', 
+        style=discord.ButtonStyle.secondary,
+        emoji='🏠',
+        row=1
+    )
+    async def back_to_profile(self, interaction: discord.Interaction, button: Button) -> None:
+        """Return to profile overview."""
+        user_data = await self.db.get_user_complete_data(self.member.id, interaction.guild_id)
         
-        embed = self.embed_builder.create_inventory_embed(self.member, len(pinkslips), win_loss_stats)
-        view = PinkSlipInventoryView(interaction, self.member, pinkslips, self.db, self.embed_builder)
+        embed = self.embed_manager.create_profile_overview(self.member, user_data)
+        view = PinkSlipInventoryView(self.member, user_data['vehicles'], self.db, self.embed_manager)
         
-        await interaction.response.edit_message(embed=embed, view=view, delete_after=600)
+        await interaction.response.edit_message(embed=embed, view=view, delete_after=900)
 
-class PinkSlipInventoryDropdown(Select):
-    def __init__(self, interaction: discord.Interaction, member: discord.Member,
-                 pinkslips: List, db, embed_builder) -> None:
-        self.interaction = interaction
+    @discord.ui.button(
+        label='📊 View Statistics', 
+        style=discord.ButtonStyle.primary,
+        emoji='📊',
+        row=1
+    )
+    async def view_detailed_stats(self, interaction: discord.Interaction, button: Button) -> None:
+        """Show detailed statistics."""
+        user_data = await self.db.get_user_complete_data(self.member.id, interaction.guild_id)
+        stats = user_data['stats']
+        
+        total_races = stats['wins'] + stats['losses']
+        win_rate = (stats['wins'] / total_races * 100) if total_races > 0 else 0
+        
+        embed = self.embed_manager.create_info(
+            f"📊 {self.member.display_name}'s Detailed Statistics",
+            f"**🏆 Wins:** {stats['wins']}\n"
+            f"**💔 Losses:** {stats['losses']}\n"
+            f"**📈 Win Rate:** {win_rate:.1f}%\n"
+            f"**🏁 Total Races:** {total_races}\n"
+            f"**🚗 Registered Vehicles:** {len(user_data['vehicles'])}\n"
+            f"**✅ Approved Vehicles:** {sum(1 for v in user_data['vehicles'] if v[4] == 'approved')}\n\n"
+            "*More detailed statistics coming soon!*"
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+class InventoryDropdown(Select):
+    """Dropdown for vehicle inventory browsing."""
+    
+    def __init__(self, member: discord.Member, vehicles: List, db, embed_manager) -> None:
         self.member = member
         self.db = db
-        self.embed_builder = embed_builder
+        self.embed_manager = embed_manager
+        
+        status_emojis = {
+            'approved': '✅',
+            'pending': '⏳',
+            'denied': '❌'
+        }
         
         options = [
             discord.SelectOption(
-                label=f"{pinkslip[0]} - {pinkslip[1]}",
-                value=str(pinkslip[5]),  # slip_id
-                description=f"Status: {pinkslip[4]}"
+                label=f"{vehicle[0]} ({vehicle[1]})",
+                value=str(vehicle[7]),  # slip_id
+                description=f"Status: {vehicle[4].title()} • ID: {vehicle[7]}",
+                emoji=status_emojis.get(vehicle[4], '❓')
             )
-            for pinkslip in pinkslips[:25]  # Discord limit
+            for vehicle in vehicles
         ]
         
         super().__init__(
@@ -445,17 +882,19 @@ class PinkSlipInventoryDropdown(Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        """Display detailed vehicle information."""
         selected_slip_id = self.values[0]
-        pinkslip_data = await self.db.get_pinkslip_by_id(selected_slip_id)
+        vehicle_data = await self.db.get_vehicle_by_id(selected_slip_id)
         
-        if not pinkslip_data:
-            embed = self.embed_builder.create_error_embed(
-                "Error", "Vehicle registration not found."
+        if not vehicle_data:
+            embed = self.embed_manager.create_error(
+                "Vehicle Not Found",
+                "The selected vehicle could not be found."
             )
         else:
-            embed = self.embed_builder.create_detailed_pinkslip_embed(pinkslip_data, self.member)
+            embed = self.embed_manager.create_vehicle_details(vehicle_data, self.member)
         
-        pinkslips = await self.db.get_user_pinkslips(self.member.id, interaction.guild_id)
-        view = PinkSlipInventoryView(interaction, self.member, pinkslips, self.db, self.embed_builder)
+        user_data = await self.db.get_user_complete_data(self.member.id, interaction.guild_id)
+        view = PinkSlipInventoryView(self.member, user_data['vehicles'], self.db, self.embed_manager)
         
-        await interaction.response.edit_message(embed=embed, view=view, delete_after=600)
+        await interaction.response.edit_message(embed=embed, view=view, delete_after=900)
