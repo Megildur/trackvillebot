@@ -20,7 +20,7 @@ class MyBot(commands.Bot):
         await self.load_extension('sync')
         for filename in os.listdir('cogs'):
             if filename.endswith('.py'):
-                cog_name = filename[:-3]  # Remove the .py extension
+                cog_name = filename[:-3]
                 await bot.load_extension(f'cogs.{cog_name}')
 
     async def on_ready(self) -> None:
