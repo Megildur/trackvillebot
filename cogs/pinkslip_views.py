@@ -645,7 +645,7 @@ class VehicleDropdown(Select):
         options = [
             discord.SelectOption(
                 label=f"{vehicle[0]} ({vehicle[1]})",
-                value=str(vehicle[5]),  # slip_id - adjusted index
+                value=str(vehicle[5]),  # slip_id
                 description=f"Status: {vehicle[4].title()}",
                 emoji="🚗"
             )
@@ -728,6 +728,19 @@ class TransferConfirmationView(View):
         self.slip_id = slip_id
         self.db = db
         self.embed_manager = embed_manager
+
+    async def on_timeout(self) -> None:
+        """Handle timeout by reverting changes."""
+        try:
+            # Revert stats update
+            initiator_stat = "wins" if self.outcome == "win" else "losses"
+            await self.db.update_user_stats(self.initiator.id, self.target.guild.id, initiator_stat, -1)
+            
+            # Revert ownership
+            original_owner = self.target if self.outcome == "win" else self.initiator
+            await self.db.transfer_vehicle_ownership(self.slip_id, original_owner.id, self.target.guild.id)
+        except:
+            pass  # Silently handle timeout cleanup errors
 
     @discord.ui.button(
         label='✅ Confirm Transfer', 
@@ -865,7 +878,7 @@ class InventoryDropdown(Select):
         options = [
             discord.SelectOption(
                 label=f"{vehicle[0]} ({vehicle[1]})",
-                value=str(vehicle[5]),  # slip_id - adjusted index
+                value=str(vehicle[5]),  # slip_id
                 description=f"Status: {vehicle[4].title()}",
                 emoji=status_emojis.get(vehicle[4], '❓')
             )

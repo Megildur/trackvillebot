@@ -184,23 +184,27 @@ class PinkslipDatabase:
         """Transfer vehicle ownership with validation."""
         async with aiosqlite.connect(self.db_path) as db:
             try:
-                # Check if vehicle exists
+                # Check if vehicle exists and get current owner
                 async with db.execute('''
-                    SELECT user_id FROM vehicles WHERE slip_id = ? AND guild_id = ?
+                    SELECT user_id FROM vehicles WHERE slip_id = ? AND guild_id = ? AND status = 'approved'
                 ''', (slip_id, guild_id)) as cursor:
                     result = await cursor.fetchone()
                     if not result:
                         return False
+                    
+                    # Don't transfer if already owned by new_owner_id
+                    if result[0] == new_owner_id:
+                        return False
 
                 # Update ownership
-                await db.execute('''
+                result = await db.execute('''
                     UPDATE vehicles 
                     SET user_id = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE slip_id = ? AND guild_id = ?
                 ''', (new_owner_id, slip_id, guild_id))
                 
                 await db.commit()
-                return True
+                return result.rowcount > 0
             except Exception:
                 await db.rollback()
                 return False
