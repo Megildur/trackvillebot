@@ -246,7 +246,7 @@ class EmbedManager:
             title=f"🚗 {make_model} ({year})",
             description=f"**Registration ID:** `{slip_id}`\n"
                        f"**Status:** {status_emojis.get(status, '❓')} {status.title()}\n"
-                       f"**Registered:** <t:{int(datetime.fromisoformat(created_at).timestamp())}:D>",
+                       f"**Registered:** {created_at}",
             color=status_colors.get(status, self.colors['neutral'])
         )
         
