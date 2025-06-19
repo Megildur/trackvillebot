@@ -400,8 +400,7 @@ class RegistrationDenialModal(Modal, title='❌ Registration Denial'):
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
     def _extract_embed_data(self, embed: discord.Embed) -> Dict[str, str]:
-        """Extract data from embed (same as review view)."""
-        # Implementation same as PinkSlipReviewView._extract_embed_data
+        """Extract data from embed."""
         description = embed.description
         fields = embed.fields
         
@@ -480,7 +479,6 @@ class InfoRequestModal(Modal, title='🔍 Request Additional Information'):
 
     def _extract_embed_data(self, embed: discord.Embed) -> Dict[str, str]:
         """Extract data from embed."""
-        # Same implementation as other modals
         description = embed.description
         fields = embed.fields
         
@@ -594,7 +592,7 @@ class RaceTrackerView(View):
             await interaction.response.edit_message(embed=embed, view=None)
             return
 
-        # Filter approved vehicles only
+        # Filter approved vehicles only - adjusted for correct tuple index
         approved_vehicles = [v for v in user_data['vehicles'] if v[4] == 'approved']
         
         if not approved_vehicles:
@@ -648,8 +646,8 @@ class VehicleDropdown(Select):
         options = [
             discord.SelectOption(
                 label=f"{vehicle[0]} ({vehicle[1]})",
-                value=str(vehicle[7]),  # slip_id
-                description=f"ID: {vehicle[7]} • Status: {vehicle[4].title()}",
+                value=str(vehicle[5]),  # slip_id - adjusted index
+                description=f"Status: {vehicle[4].title()}",
                 emoji="🚗"
             )
             for vehicle in vehicles
@@ -868,8 +866,8 @@ class InventoryDropdown(Select):
         options = [
             discord.SelectOption(
                 label=f"{vehicle[0]} ({vehicle[1]})",
-                value=str(vehicle[7]),  # slip_id
-                description=f"Status: {vehicle[4].title()} • ID: {vehicle[7]}",
+                value=str(vehicle[5]),  # slip_id - adjusted index
+                description=f"Status: {vehicle[4].title()}",
                 emoji=status_emojis.get(vehicle[4], '❓')
             )
             for vehicle in vehicles

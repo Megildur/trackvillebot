@@ -1,4 +1,3 @@
-
 import discord
 from typing import Dict, Tuple, Optional
 
@@ -133,14 +132,14 @@ class EmbedBuilder:
 
     def create_detailed_pinkslip_embed(self, pinkslip_data: Tuple, member: discord.Member) -> discord.Embed:
         """Create detailed vehicle information embed"""
-        user_id, make_model, year, engine_spec, transmission, approved, slip_id = pinkslip_data
+        user_id, guild_id, make_model, year, engine_spec, transmission, status, slip_id, created_at = pinkslip_data
         
-        status_emoji = "✅" if approved == "approved" else "⏳" if approved == "pending approval" else "❌"
-        status_color = self.color_success if approved == "approved" else self.color_warning
+        status_emoji = "✅" if status == "approved" else "⏳" if status == "pending" else "❌"
+        status_color = self.color_success if status == "approved" else self.color_warning
         
         embed = discord.Embed(
             title=f"🚗 {make_model} ({year})",
-            description=f"**Registration ID:** `{slip_id}`\n**Status:** {status_emoji} {approved.title()}",
+            description=f"**Registration ID:** `{slip_id}`\n**Status:** {status_emoji} {status.title()}",
             color=status_color
         )
         
@@ -212,21 +211,3 @@ class MessageFormatter:
     def format_slip_id(slip_id: int) -> str:
         """Format slip ID for display"""
         return f"#{slip_id:06d}"
-
-class ValidationHelper:
-    """Helper class for input validation"""
-    
-    @staticmethod
-    def validate_steam_id(steam_id: str) -> bool:
-        """Validate Steam ID format"""
-        return steam_id.isdigit() and len(steam_id) in [16, 17]
-    
-    @staticmethod
-    def validate_year(year: str) -> bool:
-        """Validate year format"""
-        return year.isdigit() and 1900 <= int(year) <= 2030
-    
-    @staticmethod
-    def sanitize_input(text: str) -> str:
-        """Sanitize text input"""
-        return text.strip()[:500]  # Limit length and remove whitespace
