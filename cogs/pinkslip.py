@@ -2,7 +2,8 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from typing import Literal
+from typing import Literal, List
+import aiosqlite
 from .pinkslip_database import PinkslipDatabase
 from .pinkslip_views import (
     PinkSlipSubmissionView, 
@@ -183,11 +184,32 @@ class PinkslipCog(commands.Cog):
         view = RaceTrackerView(interaction.user, opponent, self.db, self.embed_manager)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
+    async def autocomplete_vehicle_id(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+        """Autocomplete for vehicle IDs."""
+        try:
+            async with aiosqlite.connect(self.db.db_path) as db:
+                async with db.execute('''
+                    SELECT slip_id, make_model, year, user_id FROM vehicles 
+                    WHERE guild_id = ? AND make_model LIKE ?
+                    ORDER BY make_model LIMIT 25
+                ''', (interaction.guild_id, f'%{current}%')) as cursor:
+                    results = await cursor.fetchall()
+                    
+                return [
+                    app_commands.Choice(
+                        name=f"{row[0]} - {row[1]} ({row[2]}) - Owner: {row[3]}", 
+                        value=str(row[0])
+                    ) for row in results
+                ]
+        except Exception:
+            return []
+
     @admin_group.command(name='transfer', description='Administratively transfer vehicle ownership')
     @app_commands.describe(
         vehicle_id='Vehicle registration ID',
         new_owner='New owner of the vehicle'
     )
+    @app_commands.autocomplete(vehicle_id=autocomplete_vehicle_id)
     @app_commands.default_permissions(administrator=True)
     async def admin_transfer(
         self, 
@@ -225,6 +247,7 @@ class PinkslipCog(commands.Cog):
 
     @admin_group.command(name='delete', description='Permanently delete a vehicle registration')
     @app_commands.describe(vehicle_id='Vehicle registration ID to delete')
+    @app_commands.autocomplete(vehicle_id=autocomplete_vehicle_id)
     @app_commands.default_permissions(administrator=True)
     async def admin_delete(self, interaction: discord.Interaction, vehicle_id: str) -> None:
         """Handle administrative vehicle deletion."""
