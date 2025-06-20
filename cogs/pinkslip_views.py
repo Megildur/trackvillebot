@@ -563,7 +563,7 @@ class RaceTrackerView(View):
             )
             return
 
-        await self.db.update_user_stats(self.user.id, interaction.guild_id, "wins", 1)
+        # Don't update stats yet - wait for confirmation
         await self._handle_vehicle_selection(interaction, "win")
 
     @discord.ui.button(
@@ -579,7 +579,7 @@ class RaceTrackerView(View):
             )
             return
 
-        await self.db.update_user_stats(self.user.id, interaction.guild_id, "losses", 1)
+        # Don't update stats yet - wait for confirmation
         await self._handle_vehicle_selection(interaction, "lose")
 
     @discord.ui.button(
@@ -596,35 +596,38 @@ class RaceTrackerView(View):
 
     async def _handle_vehicle_selection(self, interaction: discord.Interaction, outcome: str) -> None:
         """Handle vehicle selection for transfer."""
-        target_user = self.opponent if outcome == "win" else self.user
-        user_data = await self.db.get_user_complete_data(target_user.id, interaction.guild_id)
+        # Determine who loses the vehicle based on outcome
+        losing_user = self.opponent if outcome == "win" else self.user
+        winning_user = self.user if outcome == "win" else self.opponent
+        
+        user_data = await self.db.get_user_complete_data(losing_user.id, interaction.guild_id)
 
         if not user_data['vehicles']:
             embed = self.embed_manager.create_info(
                 "No Vehicles Available",
-                f"{target_user.mention} has no registered vehicles to transfer."
+                f"{losing_user.mention} has no registered vehicles to transfer."
             )
             await interaction.response.edit_message(embed=embed, view=None)
             return
 
-        # Filter approved vehicles only - correct tuple index for status
+        # Filter approved vehicles only
         approved_vehicles = [v for v in user_data['vehicles'] if v[7] == 'approved']
 
         if not approved_vehicles:
             embed = self.embed_manager.create_info(
                 "No Approved Vehicles",
-                f"{target_user.mention} has no approved vehicles available for transfer."
+                f"{losing_user.mention} has no approved vehicles available for transfer."
             )
             await interaction.response.edit_message(embed=embed, view=None)
             return
 
         embed = self.embed_manager.create_info(
             "Select Vehicle for Transfer",
-            f"Choose which vehicle to transfer from {target_user.mention}:"
+            f"Choose which vehicle to transfer from {losing_user.mention} to {winning_user.mention}:"
         )
 
         view = VehicleSelectionView(
-            self.user, target_user, approved_vehicles, outcome, self.db, self.embed_manager
+            self.user, self.opponent, approved_vehicles, outcome, self.db, self.embed_manager
         )
 
         await interaction.response.edit_message(embed=embed, view=view)
@@ -632,28 +635,28 @@ class RaceTrackerView(View):
 class VehicleSelectionView(View):
     """Vehicle selection interface for transfers."""
 
-    def __init__(self, initiator: discord.Member, target: discord.Member, 
+    def __init__(self, initiator: discord.Member, opponent: discord.Member, 
                  vehicles: List, outcome: str, db, embed_manager) -> None:
         super().__init__(timeout=600)
         self.initiator = initiator
-        self.target = target
+        self.opponent = opponent
         self.outcome = outcome
         self.db = db
         self.embed_manager = embed_manager
 
         if vehicles:
             dropdown = VehicleDropdown(
-                initiator, target, vehicles[:25], outcome, db, embed_manager
+                initiator, opponent, vehicles[:25], outcome, db, embed_manager
             )
             self.add_item(dropdown)
 
 class VehicleDropdown(Select):
     """Dropdown for vehicle selection."""
 
-    def __init__(self, initiator: discord.Member, target: discord.Member,
+    def __init__(self, initiator: discord.Member, opponent: discord.Member,
                  vehicles: List, outcome: str, db, embed_manager) -> None:
         self.initiator = initiator
-        self.target = target
+        self.opponent = opponent
         self.outcome = outcome
         self.db = db
         self.embed_manager = embed_manager
@@ -687,27 +690,14 @@ class VehicleDropdown(Select):
             await interaction.response.edit_message(embed=embed, view=None)
             return
 
-        # Transfer ownership
-        new_owner = self.initiator if self.outcome == "win" else self.target
-        success = await self.db.transfer_vehicle_ownership(
-            selected_slip_id, new_owner.id, interaction.guild_id
-        )
-
-        if not success:
-            embed = self.embed_manager.create_error(
-                "Transfer Failed",
-                "Vehicle ownership transfer failed."
-            )
-            await interaction.response.edit_message(embed=embed, view=None)
-            return
-
+        # Don't transfer ownership yet - wait for confirmation
         # Create confirmation request
         embed = self.embed_manager.create_transfer_confirmation(
-            self.initiator, self.target, vehicle_data[2], vehicle_data[3], self.outcome
+            self.initiator, self.opponent, vehicle_data[2], vehicle_data[3], self.outcome
         )
 
         view = TransferConfirmationView(
-            self.initiator, self.target, self.outcome, selected_slip_id, self.db, self.embed_manager
+            self.initiator, self.opponent, self.outcome, selected_slip_id, self.db, self.embed_manager
         )
 
         await interaction.response.edit_message(embed=embed, view=None)
@@ -726,33 +716,25 @@ class VehicleDropdown(Select):
         if not channel:
             return
 
-        target_mention = self.target.mention
+        # The opponent should be the one to confirm the result
+        opponent_mention = self.opponent.mention
         try:
-            await channel.send(target_mention, embed=embed, view=view)
+            await channel.send(opponent_mention, embed=embed, view=view)
         except discord.Forbidden:
             pass
 
 class TransferConfirmationView(View):
     """Transfer confirmation interface."""
 
-    def __init__(self, initiator: discord.Member, target: discord.Member,
+    def __init__(self, initiator: discord.Member, opponent: discord.Member,
                  outcome: str, slip_id: str, db, embed_manager) -> None:
         super().__init__(timeout=1800)  # 30 minutes
         self.initiator = initiator
-        self.target = target
+        self.opponent = opponent
         self.outcome = outcome
         self.slip_id = slip_id
         self.db = db
         self.embed_manager = embed_manager
-
-    async def on_timeout(self) -> None:
-        """Handle timeout by reverting changes."""
-        try:
-            # We can't easily revert stats without proper guild_id access
-            # This should be handled by the calling function or removed
-            pass
-        except:
-            pass  # Silently handle timeout cleanup errors
 
     @discord.ui.button(
         label='✅ Confirm Transfer', 
@@ -761,25 +743,49 @@ class TransferConfirmationView(View):
     )
     async def confirm_transfer(self, interaction: discord.Interaction, button: Button) -> None:
         """Confirm the vehicle transfer."""
-        if interaction.user.id != self.target.id:
+        if interaction.user.id != self.opponent.id:
             await interaction.response.send_message(
                 "❌ Only the mentioned user can confirm this transfer.", ephemeral=True
             )
             return
 
-        # Update opponent's stats
-        opponent_stat = "losses" if self.outcome == "win" else "wins"
-        await self.db.update_user_stats(self.target.id, interaction.guild_id, opponent_stat, 1)
+        # Now that it's confirmed, update stats for both users
+        if self.outcome == "win":
+            # Initiator won, opponent lost
+            await self.db.update_user_stats(self.initiator.id, interaction.guild_id, "wins", 1)
+            await self.db.update_user_stats(self.opponent.id, interaction.guild_id, "losses", 1)
+            winner_id = self.initiator.id
+            loser_id = self.opponent.id
+            new_owner_id = self.initiator.id
+        else:
+            # Initiator lost, opponent won
+            await self.db.update_user_stats(self.initiator.id, interaction.guild_id, "losses", 1)
+            await self.db.update_user_stats(self.opponent.id, interaction.guild_id, "wins", 1)
+            winner_id = self.opponent.id
+            loser_id = self.initiator.id
+            new_owner_id = self.opponent.id
+
+        # Transfer vehicle ownership
+        success = await self.db.transfer_vehicle_ownership(
+            self.slip_id, new_owner_id, interaction.guild_id
+        )
+
+        if not success:
+            embed = self.embed_manager.create_error(
+                "Transfer Failed",
+                "Vehicle ownership transfer failed. Please contact an administrator."
+            )
+            await interaction.response.edit_message(embed=embed, view=None)
+            return
 
         # Record race result
-        winner_id = self.initiator.id if self.outcome == "win" else self.target.id
-        loser_id = self.target.id if self.outcome == "win" else self.initiator.id
         await self.db.record_race_result(interaction.guild_id, winner_id, loser_id, self.slip_id)
 
+        winner_mention = self.initiator.mention if self.outcome == "win" else self.opponent.mention
         embed = self.embed_manager.create_success(
             "Transfer Confirmed",
             f"✅ **Race Result Recorded**\n"
-            f"**Winner:** {'🏆 ' + self.initiator.mention if self.outcome == 'win' else '🏆 ' + self.target.mention}\n"
+            f"**Winner:** 🏆 {winner_mention}\n"
             f"**Vehicle Transferred:** Successfully\n"
             f"**Statistics Updated:** Both participants\n\n"
             "*Thank you for using the official racing system!*"
@@ -793,25 +799,18 @@ class TransferConfirmationView(View):
     )
     async def dispute_transfer(self, interaction: discord.Interaction, button: Button) -> None:
         """Dispute the vehicle transfer."""
-        if interaction.user.id != self.target.id:
+        if interaction.user.id != self.opponent.id:
             await interaction.response.send_message(
                 "❌ Only the mentioned user can dispute this transfer.", ephemeral=True
             )
             return
 
-        # Revert all changes
-        initiator_stat = "wins" if self.outcome == "win" else "losses"
-        await self.db.update_user_stats(self.initiator.id, interaction.guild_id, initiator_stat, -1)
-
-        # Revert ownership
-        original_owner = self.target if self.outcome == "win" else self.initiator
-        await self.db.transfer_vehicle_ownership(self.slip_id, original_owner.id, interaction.guild_id)
-
+        # No stats to revert since we haven't updated them yet
         embed = self.embed_manager.create_error(
             "Transfer Disputed",
             f"🚨 **Race Result Disputed**\n\n"
-            f"**Disputed by:** {self.target.mention}\n"
-            f"**All changes have been reverted**\n\n"
+            f"**Disputed by:** {self.opponent.mention}\n"
+            f"**No changes have been made**\n\n"
             "**Staff has been notified** and will investigate this dispute. "
             "Please provide evidence of the actual race outcome to staff members.\n\n"
             "*Fraudulent claims may result in penalties.*"
