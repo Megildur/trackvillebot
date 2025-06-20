@@ -153,14 +153,14 @@ class PinkslipDatabase:
         """Update vehicle approval status."""
         async with aiosqlite.connect(self.db_path) as db:
             try:
-                await db.execute('''
+                result = await db.execute('''
                     UPDATE vehicles 
                     SET status = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE user_id = ? AND guild_id = ? AND make_model = ? AND year = ?
                 ''', (status, user_id, guild_id, make_model, year))
                 
                 await db.commit()
-                return True
+                return result.rowcount > 0
             except Exception:
                 await db.rollback()
                 return False
@@ -169,13 +169,13 @@ class PinkslipDatabase:
         """Delete vehicle by user details."""
         async with aiosqlite.connect(self.db_path) as db:
             try:
-                await db.execute('''
+                result = await db.execute('''
                     DELETE FROM vehicles 
                     WHERE user_id = ? AND guild_id = ? AND make_model = ? AND year = ?
                 ''', (user_id, guild_id, make_model, year))
                 
                 await db.commit()
-                return True
+                return result.rowcount > 0
             except Exception:
                 await db.rollback()
                 return False
@@ -268,32 +268,43 @@ class PinkslipDatabase:
 
     async def modify_user_stats(self, user_id: int, guild_id: int, stat_type: str, action: str, amount: int) -> int:
         """Modify user statistics for administrative purposes."""
+        if stat_type not in ["wins", "losses"]:
+            raise ValueError("stat_type must be 'wins' or 'losses'")
+        if action not in ["add", "subtract"]:
+            raise ValueError("action must be 'add' or 'subtract'")
+        if amount < 0:
+            raise ValueError("amount must be non-negative")
+
         async with aiosqlite.connect(self.db_path) as db:
-            # Get current stats
-            async with db.execute('''
-                SELECT wins, losses FROM user_stats WHERE user_id = ? AND guild_id = ?
-            ''', (user_id, guild_id)) as cursor:
-                current = await cursor.fetchone()
-                wins, losses = current if current else (0, 0)
+            try:
+                # Get current stats
+                async with db.execute('''
+                    SELECT wins, losses FROM user_stats WHERE user_id = ? AND guild_id = ?
+                ''', (user_id, guild_id)) as cursor:
+                    current = await cursor.fetchone()
+                    wins, losses = current if current else (0, 0)
 
-            # Calculate new value
-            if stat_type == "wins":
-                new_value = max(0, wins + amount if action == "add" else wins - amount)
-                await db.execute('''
-                    INSERT OR REPLACE INTO user_stats 
-                    (user_id, guild_id, wins, losses, updated_at)
-                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ''', (user_id, guild_id, new_value, losses))
-            else:
-                new_value = max(0, losses + amount if action == "add" else losses - amount)
-                await db.execute('''
-                    INSERT OR REPLACE INTO user_stats 
-                    (user_id, guild_id, wins, losses, updated_at)
-                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ''', (user_id, guild_id, wins, new_value))
+                # Calculate new value
+                if stat_type == "wins":
+                    new_value = max(0, wins + amount if action == "add" else wins - amount)
+                    await db.execute('''
+                        INSERT OR REPLACE INTO user_stats 
+                        (user_id, guild_id, wins, losses, updated_at)
+                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ''', (user_id, guild_id, new_value, losses))
+                else:
+                    new_value = max(0, losses + amount if action == "add" else losses - amount)
+                    await db.execute('''
+                        INSERT OR REPLACE INTO user_stats 
+                        (user_id, guild_id, wins, losses, updated_at)
+                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ''', (user_id, guild_id, wins, new_value))
 
-            await db.commit()
-            return new_value
+                await db.commit()
+                return new_value
+            except Exception:
+                await db.rollback()
+                raise
 
     async def record_race_result(self, guild_id: int, winner_id: int, loser_id: int, vehicle_id: str = None) -> None:
         """Record race result for audit purposes."""

@@ -331,7 +331,7 @@ class PinkSlipReviewView(View):
                         make_model = line.split(':', 1)[1].strip().replace('**', '') if ':' in line else ""
                     elif 'Year:' in line or 'Year' in line:
                         year = line.split(':', 1)[1].strip().replace('**', '') if ':' in line else ""
-            
+
             elif "Performance Specs" in field.name or "⚡" in field.name:
                 lines = field.value.split('\n')
                 for line in lines:
