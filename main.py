@@ -23,9 +23,7 @@ class MyBot(commands.Bot):
         for filename in os.listdir('cogs'):
             if filename.endswith('.py') and not filename.startswith('pinkslip_'):
                 cog_name = filename[:-3]
-                await bot.load_extension(f'cogs.{cog_name}')
-        # Load the main pinkslip cog
-        await bot.load_extension('cogs.pinkslip')
+                await bot.load_extension(f'cogs.{cog_name}')    
 
     async def on_ready(self) -> None:
         print(f'Logged in as {self.user.name} (ID: {self.user.id})')
