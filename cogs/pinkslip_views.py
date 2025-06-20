@@ -322,23 +322,23 @@ class PinkSlipReviewView(View):
         make_model, year = "", ""
         engine_spec, transmission = "", ""
 
-        # Extract vehicle data from fields - check actual field names from embed creation
+        # Extract vehicle data from fields - match the actual field structure from create_review_request
         for field in fields:
-            if "Vehicle Details" in field.name or "🚗" in field.name:
+            if "🚗 Vehicle Details" in field.name:
                 lines = field.value.split('\n')
                 for line in lines:
-                    if 'Make/Model:' in line or 'Make/Model' in line:
-                        make_model = line.split(':', 1)[1].strip().replace('**', '') if ':' in line else ""
-                    elif 'Year:' in line or 'Year' in line:
-                        year = line.split(':', 1)[1].strip().replace('**', '') if ':' in line else ""
+                    if '**Make/Model:**' in line:
+                        make_model = line.split('**Make/Model:**', 1)[1].strip()
+                    elif '**Year:**' in line:
+                        year = line.split('**Year:**', 1)[1].strip()
 
-            elif "Performance Specs" in field.name or "⚡" in field.name:
+            elif "⚡ Performance Specs" in field.name:
                 lines = field.value.split('\n')
                 for line in lines:
-                    if 'Engine:' in line or 'Engine' in line:
-                        engine_spec = line.split(':', 1)[1].strip().replace('**', '') if ':' in line else ""
-                    elif 'Transmission:' in line or 'Transmission' in line:
-                        transmission = line.split(':', 1)[1].strip().replace('**', '') if ':' in line else ""
+                    if '**Engine:**' in line:
+                        engine_spec = line.split('**Engine:**', 1)[1].strip()
+                    elif '**Transmission:**' in line:
+                        transmission = line.split('**Transmission:**', 1)[1].strip()
 
         return {
             'user_id': user_id,
