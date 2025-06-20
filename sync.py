@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
-allowed_guilds = [1293647067998326936]
+allowed_guilds = [1270284390919835770]
 
 class SyncCog(commands.Cog):
     def __init__(self, bot) -> None:
