@@ -12,20 +12,78 @@ class SyncCog(commands.Cog):
     @commands.command(name='sync', description='Syncs the bot', hidden=True)
     @commands.is_owner()
     async def sync(self, ctx) -> None:
-        await self.bot.tree.sync(guild=None)
-        await ctx.send('Commands synced.')
+        try:
+            await ctx.send('🔄 Starting global sync...')
+            synced = await self.bot.tree.sync(guild=None)
+            await ctx.send(f'✅ Successfully synced {len(synced)} commands globally.')
+            print(f"Synced {len(synced)} commands globally")
+            for command in synced:
+                print(f"  - {command.name}")
+        except discord.HTTPException as e:
+            await ctx.send(f'❌ HTTP Error during sync: {e}')
+            print(f"HTTP Error during sync: {e}")
+        except discord.Forbidden as e:
+            await ctx.send(f'❌ Forbidden error during sync: {e}')
+            print(f"Forbidden error during sync: {e}")
+        except Exception as e:
+            await ctx.send(f'❌ Unexpected error during sync: {e}')
+            print(f"Unexpected error during sync: {e}")
 
     @commands.command(name='syncg', description='Syncs the bot', hidden=True)
     @commands.is_owner()
     async def syncg(self, ctx, guild: discord.Guild) -> None:
-        await self.bot.tree.sync(guild=guild)
-        await ctx.send('Commands synced.')
+        try:
+            await ctx.send(f'🔄 Starting sync for guild: {guild.name}...')
+            synced = await self.bot.tree.sync(guild=guild)
+            await ctx.send(f'✅ Successfully synced {len(synced)} commands for {guild.name}.')
+            print(f"Synced {len(synced)} commands for guild {guild.name}")
+            for command in synced:
+                print(f"  - {command.name}")
+        except discord.HTTPException as e:
+            await ctx.send(f'❌ HTTP Error during guild sync: {e}')
+            print(f"HTTP Error during guild sync: {e}")
+        except discord.Forbidden as e:
+            await ctx.send(f'❌ Forbidden error during guild sync: {e}')
+            print(f"Forbidden error during guild sync: {e}")
+        except Exception as e:
+            await ctx.send(f'❌ Unexpected error during guild sync: {e}')
+            print(f"Unexpected error during guild sync: {e}")
 
     @commands.command(name='clear', description='Clears all commands from the tree', hidden=True)
     @commands.is_owner()
     async def clear(self, ctx) -> None:
-        ctx.bot.tree.clear_commands(guild=None)
-        await ctx.send('Commands cleared.')
+        try:
+            await ctx.send('🔄 Clearing command tree...')
+            before_count = len(ctx.bot.tree.get_commands())
+            ctx.bot.tree.clear_commands(guild=None)
+            await ctx.send(f'✅ Cleared {before_count} commands from the tree.')
+            print(f"Cleared {before_count} commands from tree")
+        except Exception as e:
+            await ctx.send(f'❌ Error clearing commands: {e}')
+            print(f"Error clearing commands: {e}")
+
+    @commands.command(name='list_commands', description='List all loaded commands', hidden=True)
+    @commands.is_owner()
+    async def list_commands(self, ctx) -> None:
+        """List all commands currently in the tree for debugging."""
+        try:
+            commands = list(self.bot.tree.get_commands())
+            if not commands:
+                await ctx.send('❌ No commands found in the tree.')
+                return
+            
+            await ctx.send(f'📋 Found {len(commands)} commands in tree:')
+            for i, command in enumerate(commands, 1):
+                if isinstance(command, app_commands.Group):
+                    subcommands = list(command.walk_commands())
+                    await ctx.send(f'{i}. **{command.name}** (Group) - {len(subcommands)} subcommands')
+                    for j, subcmd in enumerate(subcommands, 1):
+                        await ctx.send(f'   {j}. {subcmd.qualified_name}')
+                else:
+                    await ctx.send(f'{i}. **{command.name}** - {command.description}')
+        except Exception as e:
+            await ctx.send(f'❌ Error listing commands: {e}')
+            print(f"Error listing commands: {e}")
 
     @app_commands.command(name='help', description='Show help for slash commands')
     async def help(self, ctx):
