@@ -12,6 +12,7 @@ from .pinkslip_views import (
     PinkSlipInventoryView
 )
 from .pinkslip_embeds import EmbedManager
+from .pinkslip_validators import ValidationHelper
 
 class PinkslipCog(commands.Cog):
     """Professional vehicle registration and race tracking system."""

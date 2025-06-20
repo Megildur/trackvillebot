@@ -25,9 +25,10 @@ __version__ = "1.0.0"
 __author__ = "Racing Management Team"
 
 # Make the main cog easily accessible
-def setup(bot):
+async def setup(bot):
     """Setup function for the pinkslip module."""
-    return PinkslipCog.setup(bot)
+    from .pinkslip import setup as pinkslip_setup
+    await pinkslip_setup(bot)
 
 __all__ = [
     'PinkslipCog',
