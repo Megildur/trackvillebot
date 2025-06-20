@@ -17,6 +17,9 @@ class MyBot(commands.Bot):
         super().__init__(command_prefix='!', intents=intents)
 
     async def setup_hook(self) -> None:
+        # Load sync extension from root directory
+        await bot.load_extension('sync')
+        
         for filename in os.listdir('cogs'):
             if filename.endswith('.py') and not filename.startswith('pinkslip_'):
                 cog_name = filename[:-3]
