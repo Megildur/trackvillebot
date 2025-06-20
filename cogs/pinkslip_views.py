@@ -591,8 +591,8 @@ class RaceTrackerView(View):
             await interaction.response.edit_message(embed=embed, view=None)
             return
 
-        # Filter approved vehicles only - adjusted for correct tuple index
-        approved_vehicles = [v for v in user_data['vehicles'] if v[4] == 'approved']
+        # Filter approved vehicles only - correct tuple index for status
+        approved_vehicles = [v for v in user_data['vehicles'] if v[7] == 'approved']
 
         if not approved_vehicles:
             embed = self.embed_manager.create_info(
@@ -644,9 +644,9 @@ class VehicleDropdown(Select):
 
         options = [
             discord.SelectOption(
-                label=f"{vehicle[0]} ({vehicle[1]})",
-                value=str(vehicle[5]),  # slip_id
-                description=f"Status: {vehicle[4].title()}",
+                label=f"{vehicle[2]} ({vehicle[3]})",  # make_model, year
+                value=str(vehicle[8]),  # slip_id
+                description=f"Status: {vehicle[7].title()}",  # status
                 emoji="🚗"
             )
             for vehicle in vehicles
