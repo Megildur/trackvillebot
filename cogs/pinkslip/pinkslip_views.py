@@ -2,6 +2,7 @@ import discord
 from discord.ui import View, Button, Modal, Select
 from typing import List, Optional, Dict, Any
 import re
+from .pinkslip_validators import ValidationHelper
 
 class PinkSlipSubmissionView(View):
     """Professional vehicle registration submission interface."""
@@ -181,29 +182,16 @@ class VehicleRegistrationModal(Modal, title='🚗 Vehicle Registration Form'):
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
     def _validate_inputs(self) -> List[str]:
-        """Validate all form inputs."""
-        errors = []
-
-        # Year validation
-        if not self.year.value.isdigit() or not (1990 <= int(self.year.value) <= 2024):
-            errors.append("❌ Year must be between 1990 and 2024")
-
-        # Steam ID validation
-        steam_id = self.steam_id.value.strip()
-        if not steam_id.isdigit() or len(steam_id) != 17:
-            errors.append("❌ Steam ID must be exactly 17 digits")
-
-        # Basic content validation
-        if len(self.make_model.value.strip()) < 3:
-            errors.append("❌ Make & Model must be at least 3 characters")
-
-        if len(self.engine_spec.value.strip()) < 5:
-            errors.append("❌ Engine specifications must be more detailed")
-
-        if len(self.transmission.value.strip()) < 3:
-            errors.append("❌ Transmission information is too brief")
-
-        return errors
+        """Validate all form inputs using ValidationHelper."""
+        vehicle_data = {
+            'make_model': self.make_model.value.strip(),
+            'year': self.year.value.strip(),
+            'engine_spec': self.engine_spec.value.strip(),
+            'transmission': self.transmission.value.strip(),
+            'steam_id': self.steam_id.value.strip()
+        }
+        
+        return ValidationHelper.validate_vehicle_data(vehicle_data)
 
     async def _notify_staff(self, interaction: discord.Interaction, vehicle_data: Dict[str, str]) -> None:
         """Send registration to staff review channel."""
