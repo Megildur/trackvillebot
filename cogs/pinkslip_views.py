@@ -242,11 +242,28 @@ class PinkSlipReviewView(View):
         """Approve the vehicle registration."""
         embed_data = self._extract_embed_data(interaction.message.embeds[0])
 
+        # Debug: Check if we extracted data correctly
+        if not embed_data['make_model'] or not embed_data['year'] or not embed_data['user_id']:
+            embed = self.embed_manager.create_error(
+                "Data Extraction Failed",
+                f"Failed to extract vehicle data from embed. Got: {embed_data}"
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
         try:
-            await self.db.update_vehicle_status(
+            success = await self.db.update_vehicle_status(
                 int(embed_data['user_id']), interaction.guild_id,
                 embed_data['make_model'], embed_data['year'], 'approved'
             )
+
+            if not success:
+                embed = self.embed_manager.create_error(
+                    "Approval Failed",
+                    f"Could not find vehicle: {embed_data['make_model']} ({embed_data['year']}) for user {embed_data['user_id']}"
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
 
             # Update staff message
             embed = self.embed_manager.create_success(
@@ -263,7 +280,7 @@ class PinkSlipReviewView(View):
         except Exception as e:
             embed = self.embed_manager.create_error(
                 "Approval Failed",
-                "An error occurred while processing the approval."
+                f"An error occurred while processing the approval: {str(e)}"
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -296,33 +313,32 @@ class PinkSlipReviewView(View):
         description = embed.description
         fields = embed.fields
 
-        # Extract user ID from mention
+        # Extract user ID from mention in description
         mention_pattern = r'<@!?(\d+)>'
         user_match = re.search(mention_pattern, description)
         user_id = user_match.group(1) if user_match else "0"
 
-        # Extract vehicle data from fields
-        vehicle_field = next((f for f in fields if "Vehicle Details" in f.name), None)
-        performance_field = next((f for f in fields if "Performance Specs" in f.name), None)
-
+        # Initialize variables
         make_model, year = "", ""
         engine_spec, transmission = "", ""
 
-        if vehicle_field:
-            lines = vehicle_field.value.split('\n')
-            for line in lines:
-                if 'Make/Model:' in line:
-                    make_model = line.split(':', 1)[1].strip().replace('**', '')
-                elif 'Year:' in line:
-                    year = line.split(':', 1)[1].strip().replace('**', '')
-
-        if performance_field:
-            lines = performance_field.value.split('\n')
-            for line in lines:
-                if 'Engine:' in line:
-                    engine_spec = line.split(':', 1)[1].strip().replace('**', '')
-                elif 'Transmission:' in line:
-                    transmission = line.split(':', 1)[1].strip().replace('**', '')
+        # Extract vehicle data from fields - check actual field names from embed creation
+        for field in fields:
+            if "Vehicle Details" in field.name or "🚗" in field.name:
+                lines = field.value.split('\n')
+                for line in lines:
+                    if 'Make/Model:' in line or 'Make/Model' in line:
+                        make_model = line.split(':', 1)[1].strip().replace('**', '') if ':' in line else ""
+                    elif 'Year:' in line or 'Year' in line:
+                        year = line.split(':', 1)[1].strip().replace('**', '') if ':' in line else ""
+            
+            elif "Performance Specs" in field.name or "⚡" in field.name:
+                lines = field.value.split('\n')
+                for line in lines:
+                    if 'Engine:' in line or 'Engine' in line:
+                        engine_spec = line.split(':', 1)[1].strip().replace('**', '') if ':' in line else ""
+                    elif 'Transmission:' in line or 'Transmission' in line:
+                        transmission = line.split(':', 1)[1].strip().replace('**', '') if ':' in line else ""
 
         return {
             'user_id': user_id,
