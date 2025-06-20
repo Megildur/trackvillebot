@@ -877,10 +877,10 @@ class InventoryDropdown(Select):
 
         options = [
             discord.SelectOption(
-                label=f"{vehicle[0]} ({vehicle[1]})",
-                value=str(vehicle[5]),  # slip_id
-                description=f"Status: {vehicle[4].title()}",
-                emoji=status_emojis.get(vehicle[4], '❓')
+                label=f"{vehicle[2]} ({vehicle[3]})",  # make_model, year
+                value=str(vehicle[8]),  # slip_id
+                description=f"Status: {vehicle[7].title()}",  # status
+                emoji=status_emojis.get(vehicle[7], '❓')  # status
             )
             for vehicle in vehicles
         ]
