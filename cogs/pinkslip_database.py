@@ -118,9 +118,9 @@ class PinkslipDatabase:
     async def get_user_complete_data(self, user_id: int, guild_id: int) -> Dict[str, Any]:
         """Get complete user data including vehicles and statistics."""
         async with aiosqlite.connect(self.db_path) as db:
-            # Get vehicles
+            # Get vehicles with all necessary fields
             async with db.execute('''
-                SELECT make_model, year, engine_spec, transmission, status, slip_id, created_at
+                SELECT user_id, guild_id, make_model, year, engine_spec, transmission, steam_id, status, slip_id, created_at
                 FROM vehicles 
                 WHERE user_id = ? AND guild_id = ?
                 ORDER BY created_at DESC
@@ -144,7 +144,7 @@ class PinkslipDatabase:
         """Get vehicle details by slip ID."""
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute('''
-                SELECT user_id, guild_id, make_model, year, engine_spec, transmission, status, slip_id
+                SELECT user_id, guild_id, make_model, year, engine_spec, transmission, steam_id, status, slip_id, created_at
                 FROM vehicles WHERE slip_id = ?
             ''', (slip_id,)) as cursor:
                 return await cursor.fetchone()

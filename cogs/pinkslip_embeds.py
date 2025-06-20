@@ -212,8 +212,8 @@ class EmbedManager:
             latest_vehicle = user_data['vehicles'][0]
             embed.add_field(
                 name="🆕 Latest Registration",
-                value=f"**{latest_vehicle[0]}** ({latest_vehicle[1]})\n"
-                      f"Status: {latest_vehicle[4].title()}",
+                value=f"**{latest_vehicle[2]}** ({latest_vehicle[3]})\n"
+                      f"Status: {latest_vehicle[7].title()}",
                 inline=False
             )
         
@@ -228,7 +228,7 @@ class EmbedManager:
 
     def create_vehicle_details(self, vehicle_data: Tuple, member: discord.Member) -> discord.Embed:
         """Create detailed vehicle information display."""
-        user_id, guild_id, make_model, year, engine_spec, transmission, status, slip_id, created_at = vehicle_data
+        user_id, guild_id, make_model, year, engine_spec, transmission, steam_id, status, slip_id, created_at = vehicle_data
         
         status_colors = {
             'approved': self.colors['success'],

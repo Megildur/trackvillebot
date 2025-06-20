@@ -735,7 +735,7 @@ class TransferConfirmationView(View):
             # Revert stats update
             initiator_stat = "wins" if self.outcome == "win" else "losses"
             await self.db.update_user_stats(self.initiator.id, self.target.guild.id, initiator_stat, -1)
-            
+
             # Revert ownership
             original_owner = self.target if self.outcome == "win" else self.initiator
             await self.db.transfer_vehicle_ownership(self.slip_id, original_owner.id, self.target.guild.id)
@@ -855,7 +855,7 @@ class PinkSlipInventoryView(View):
             f"**📈 Win Rate:** {win_rate:.1f}%\n"
             f"**🏁 Total Races:** {total_races}\n"
             f"**🚗 Registered Vehicles:** {len(user_data['vehicles'])}\n"
-            f"**✅ Approved Vehicles:** {sum(1 for v in user_data['vehicles'] if v[4] == 'approved')}\n\n"
+            f"**✅ Approved Vehicles:** {sum(1 for v in user_data['vehicles'] if v[7] == 'approved')}\n\n"
             "*More detailed statistics coming soon!*"
         )
 
