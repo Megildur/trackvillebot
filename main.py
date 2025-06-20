@@ -23,9 +23,12 @@ class MyBot(commands.Bot):
         # Load the main pinkslip cog
         await bot.load_extension('cogs.pinkslip')
         
-        # Load other cogs (excluding pinkslip folder)
+        # Load the twitch module
+        await bot.load_extension('cogs.twitch')
+        
+        # Load other cogs (excluding pinkslip and twitch folders)
         for filename in os.listdir('cogs'):
-            if filename.endswith('.py') and filename != 'pinkslip':
+            if filename.endswith('.py') and filename not in ['pinkslip', 'twitch']:
                 cog_name = filename[:-3]
                 await bot.load_extension(f'cogs.{cog_name}')    
 
