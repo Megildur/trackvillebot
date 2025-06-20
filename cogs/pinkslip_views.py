@@ -423,16 +423,16 @@ class RegistrationDenialModal(Modal, title='❌ Registration Denial'):
         user_match = re.search(mention_pattern, description)
         user_id = user_match.group(1) if user_match else "0"
 
-        vehicle_field = next((f for f in fields if "Vehicle Details" in f.name), None)
+        vehicle_field = next((f for f in fields if "🚗 Vehicle Details" in f.name), None)
 
         make_model, year = "", ""
         if vehicle_field:
             lines = vehicle_field.value.split('\n')
             for line in lines:
-                if 'Make/Model:' in line:
-                    make_model = line.split(':', 1)[1].strip().replace('**', '')
-                elif 'Year:' in line:
-                    year = line.split(':', 1)[1].strip().replace('**', '')
+                if '**Make/Model:**' in line:
+                    make_model = line.split('**Make/Model:**', 1)[1].strip()
+                elif '**Year:**' in line:
+                    year = line.split('**Year:**', 1)[1].strip()
 
         return {
             'user_id': user_id,
@@ -501,16 +501,16 @@ class InfoRequestModal(Modal, title='🔍 Request Additional Information'):
         user_match = re.search(mention_pattern, description)
         user_id = user_match.group(1) if user_match else "0"
 
-        vehicle_field = next((f for f in fields if "Vehicle Details" in f.name), None)
+        vehicle_field = next((f for f in fields if "🚗 Vehicle Details" in f.name), None)
 
         make_model, year = "", ""
         if vehicle_field:
             lines = vehicle_field.value.split('\n')
             for line in lines:
-                if 'Make/Model:' in line:
-                    make_model = line.split(':', 1)[1].strip().replace('**', '')
-                elif 'Year:' in line:
-                    year = line.split(':', 1)[1].strip().replace('**', '')
+                if '**Make/Model:**' in line:
+                    make_model = line.split('**Make/Model:**', 1)[1].strip()
+                elif '**Year:**' in line:
+                    year = line.split('**Year:**', 1)[1].strip()
 
         return {
             'user_id': user_id,
@@ -808,7 +808,7 @@ class TransferConfirmationView(View):
         await self.db.update_user_stats(self.initiator.id, interaction.guild_id, initiator_stat, -1)
 
         # Revert ownership
-        original_owner = self.target if self.outcome == "win" else self.initiator
+        original_owner = self.target if selfif self.outcome == "win" else self.initiator
         await self.db.transfer_vehicle_ownership(self.slip_id, original_owner.id, interaction.guild_id)
 
         embed = self.embed_manager.create_error(

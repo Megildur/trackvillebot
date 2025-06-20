@@ -153,15 +153,36 @@ class PinkslipDatabase:
         """Update vehicle approval status."""
         async with aiosqlite.connect(self.db_path) as db:
             try:
+                # First check if the vehicle exists with debug info
+                async with db.execute('''
+                    SELECT id, make_model, year, status FROM vehicles 
+                    WHERE user_id = ? AND guild_id = ?
+                ''', (user_id, guild_id)) as cursor:
+                    vehicles = await cursor.fetchall()
+                    print(f"Debug: Found {len(vehicles)} vehicles for user {user_id}")
+                    for v in vehicles:
+                        print(f"  Vehicle: {v[1]} ({v[2]}) - Status: {v[3]}")
+                
+                # Try exact match first
                 result = await db.execute('''
                     UPDATE vehicles 
                     SET status = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE user_id = ? AND guild_id = ? AND make_model = ? AND year = ?
                 ''', (status, user_id, guild_id, make_model, year))
                 
+                if result.rowcount == 0:
+                    # Try case-insensitive match
+                    result = await db.execute('''
+                        UPDATE vehicles 
+                        SET status = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE user_id = ? AND guild_id = ? AND LOWER(make_model) = LOWER(?) AND year = ?
+                    ''', (status, user_id, guild_id, make_model, year))
+                
                 await db.commit()
+                print(f"Debug: Updated {result.rowcount} rows for {make_model} {year}")
                 return result.rowcount > 0
-            except Exception:
+            except Exception as e:
+                print(f"Debug: Error updating vehicle status: {e}")
                 await db.rollback()
                 return False
 
@@ -169,10 +190,18 @@ class PinkslipDatabase:
         """Delete vehicle by user details."""
         async with aiosqlite.connect(self.db_path) as db:
             try:
+                # Try exact match first
                 result = await db.execute('''
                     DELETE FROM vehicles 
                     WHERE user_id = ? AND guild_id = ? AND make_model = ? AND year = ?
                 ''', (user_id, guild_id, make_model, year))
+                
+                if result.rowcount == 0:
+                    # Try case-insensitive match
+                    result = await db.execute('''
+                        DELETE FROM vehicles 
+                        WHERE user_id = ? AND guild_id = ? AND LOWER(make_model) = LOWER(?) AND year = ?
+                    ''', (user_id, guild_id, make_model, year))
                 
                 await db.commit()
                 return result.rowcount > 0
