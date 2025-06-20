@@ -20,8 +20,12 @@ class MyBot(commands.Bot):
         # Load sync extension from root directory
         await bot.load_extension('sync')
         
+        # Load the main pinkslip cog
+        await bot.load_extension('cogs.pinkslip')
+        
+        # Load other cogs (excluding pinkslip components)
         for filename in os.listdir('cogs'):
-            if filename.endswith('.py') and not filename.startswith('pinkslip_'):
+            if filename.endswith('.py') and filename not in ['pinkslip.py', 'pinkslip_database.py', 'pinkslip_embeds.py', 'pinkslip_views.py', 'pinkslip_models.py', 'pinkslip_utils.py', 'pinkslip_validators.py']:
                 cog_name = filename[:-3]
                 await bot.load_extension(f'cogs.{cog_name}')    
 
